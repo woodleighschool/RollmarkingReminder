@@ -1,0 +1,57 @@
+name: Build macOS DMG
+
+on:
+    push:
+        branches: [main]
+
+jobs:
+    build:
+        runs-on: macos-latest
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v2
+
+            - name: Install Homebrew
+              run: |
+                  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+                  echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> $HOME/.zprofile
+                  eval "$(/opt/homebrew/bin/brew shellenv)"
+
+            - name: Install dependencies
+              run: |
+                  brew install python@3.11 || :
+                  brew link --overwrite python@3.11 || :
+                  python3.11 -m pip install -r requirements.txt
+
+            - name: Create .app using py2app
+              run: |
+                  python3.11 setup.py py2app
+
+            - name: Create DMG
+              run: |
+                  hdiutil create -srcfolder dist/TagToInfo.app -volname TagToInfo -format UDZO TagToInfo.dmg
+
+            - name: Get version from setup.py
+              run: |
+                  echo "VERSION=$(sed -n "s/^.*'CFBundleVersion': '\([^']*\)',.*$/\1/p" setup.py)" >> $GITHUB_ENV
+
+            - name: Create Release
+              id: create_release
+              uses: actions/create-release@v1
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GHPAT }}
+              with:
+                  tag_name: ${{ env.VERSION }}
+                  release_name: ${{ env.VERSION }}
+                  draft: false
+                  prerelease: false
+
+            - name: Upload DMG
+              uses: actions/upload-release-asset@v1
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GHPAT }}
+              with:
+                  upload_url: ${{ steps.create_release.outputs.upload_url }}
+                  asset_path: ./TagToInfo.dmg
+                  asset_name: TagToInfo.dmg
+                  asset_content_type: application/octet-stream
