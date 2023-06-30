@@ -13,11 +13,12 @@ class App(QtWidgets.QWidget):
 
         # Set window title, size, and widgets
         self.setWindowTitle("TagToInfo")
-        self.setFixedSize(400, 280)
+        self.setFixedSize(400, 300)
         self.asset_label = QtWidgets.QLabel(
             "Enter Unique Identifier (S/N, Name, Asset #):")
         self.asset_entry = QtWidgets.QLineEdit()
         self.print_var = QtWidgets.QCheckBox("Automatic Print")
+        self.force_print_button = QtWidgets.QPushButton("Print Anyway")
         self.status_label = QtWidgets.QLabel()
         self.model_label = QtWidgets.QLabel()
         self.name_label = QtWidgets.QLabel()
@@ -28,19 +29,29 @@ class App(QtWidgets.QWidget):
         # Connect widgets to functions
         self.asset_entry.returnPressed.connect(self.submit_asset_request)
         self.copy_button.clicked.connect(self.copy_serial_number)
+        self.force_print_button.clicked.connect(self.force_print)
 
         # Default button state and label text
         self.copy_button.setEnabled(False)
+        self.force_print_button.setEnabled(False)
         self.copy_button.setText("Copy Serial Number")
 
         # Create layout and add widgets
         layout = QtWidgets.QVBoxLayout(self)
         layout.addWidget(self.asset_label)
         layout.addWidget(self.asset_entry)
-        layout.addWidget(self.print_var)
+
+        # Create a horizontal layout for checkbox and button
+        hbox = QtWidgets.QHBoxLayout()
+        hbox.addWidget(self.print_var)
+        hbox.addWidget(self.force_print_button)
+        hbox.addStretch()
+
+        layout.addLayout(hbox)
+
         layout.addWidget(self.status_label)
-        layout.addWidget(self.model_label)
         layout.addWidget(self.name_label)
+        layout.addWidget(self.model_label)
         layout.addWidget(self.serial_label)
         layout.addWidget(self.managed_label)
         layout.addWidget(self.copy_button)
@@ -53,10 +64,16 @@ class App(QtWidgets.QWidget):
             self.api_token = 'Bearer ' + data['api_token']
         self.api_endpoint = "https://wdm.jamfcloud.com/JSSResource"
 
-    def submit_asset_request(self):
-        # Get asset tag from widget
-        asset_tag = self.asset_entry.text()
+    def force_print(self):
+        previous_submit = self.status_label.text().split(": ")[1]
+        force_print = True
+        self.submit_asset_request(previous_submit, force_print)
+
+    def submit_asset_request(self, previous_submit=None, force_print=False):
+        # Get asset tag from widget or use the previous_submit if provided
+        asset_tag = previous_submit if previous_submit else self.asset_entry.text()
         self.copy_button.setText("Copy Serial Number")
+        self.force_print_button.setText("Print Anyway")
 
         try:
             # Get computer information from JAMF API
@@ -65,28 +82,30 @@ class App(QtWidgets.QWidget):
 
             # Set widget labels with device information
             self.status_label.setStyleSheet("color: green")
-            self.status_label.setText(f"Request Successful")
+            self.status_label.setText(f"Showing results for: {asset_tag}")
             self.model_label.setText(f"Model: {model}")
             self.name_label.setText(f"Name: {name}")
             self.serial_label.setText(f"Serial Number: {serial}")
             self.managed_label.setText(f"Managed: {managed}")
             self.copy_button.setEnabled(True)
+            self.force_print_button.setEnabled(True)
 
-            # Generate computer information image if checkbox is checked
-            if self.print_var.isChecked():
+            # Generate computer information image if checkbox is checked or force_print is True
+            if self.print_var.isChecked() or force_print:
                 self.generate_info(asset_tag, name, serial,
                                    model, jamf_url)
-                self.print_asset_label()
+                self.print_asset_label(asset_tag)
 
         except ValueError as e:
             # Display error message if there is a problem with the input or API
-            self.status_label.setText(f"Request Failed\n{e}")
+            self.status_label.setText(f"{e}")
             self.status_label.setStyleSheet("color: red")
             self.model_label.clear()
             self.name_label.clear()
             self.serial_label.clear()
             self.managed_label.clear()
             self.copy_button.setEnabled(False)
+            self.force_print_button.setEnabled(False)
 
         # Clear asset entry widget after submitting request
         self.asset_entry.clear()
@@ -100,7 +119,7 @@ class App(QtWidgets.QWidget):
         # Try to match computer first
         match_api_endpoint = f"{self.api_endpoint}/computers/match/{asset_tag}"
         response = requests.get(
-            match_api_endpoint, headers=headers, auth=auth)
+            match_api_endpoint, headers=headers, auth=auth, verify=False)
         if response.status_code != 200:
             raise ValueError("Failed to connect to JAMF API")
 
@@ -113,7 +132,7 @@ class App(QtWidgets.QWidget):
             # If not matched as computer, try mobiledevice
             match_api_endpoint = f"{self.api_endpoint}/mobiledevices/match/{asset_tag}"
             response = requests.get(
-                match_api_endpoint, headers=headers, auth=auth)
+                match_api_endpoint, headers=headers, auth=auth, verify=False)
             if response.status_code != 200:
                 raise ValueError("Failed to connect to JAMF API")
 
@@ -127,7 +146,7 @@ class App(QtWidgets.QWidget):
         # Get device information from JAMF API and parse response
         info_api_endpoint = f"{self.api_endpoint}/{device_type}/id/{device_id}"
         response = requests.get(
-            info_api_endpoint, headers=headers, auth=auth)
+            info_api_endpoint, headers=headers, auth=auth, verify=False)
 
         if device_type == "computers":
             computer = json.loads(response.text)["computer"]
@@ -201,35 +220,20 @@ class App(QtWidgets.QWidget):
         clipboard.setText(serial_number)
         self.copy_button.setText("Copied!")
 
-    def print_asset_label(self):
+    def print_asset_label(self, asset_tag):
         # Print image to network printer
-        asset_tag = self.asset_entry.text()
         headers = {'Authorization': f'{self.api_token}'}
         files = {'file': open(f'/tmp/tmp.upload-{asset_tag}.png', 'rb')}
 
         try:
-            response = requests.post(
-                'http://172.19.10.12:5001/print_image', headers=headers, files=files)
-            data = response.json()
-            if response.status_code == 200:
-                self.status_label.setText(
-                    f"Request Successful: {data['status']}")
-                self.status_label.setStyleSheet("color: green")
-            else:
-                raise ValueError(f"Failed to print?")
-        except:
-            raise ValueError(f"Failed to connect to printer")
-
-        # Remove temporary file after printing
-        os.remove(f'/tmp/tmp.upload-{asset_tag}.png')
-
-    def clear_asset_entry(self):
-        # Clear asset entry and widget labels
-        self.asset_entry.setText("")
-        self.status_label.setText("")
-        self.model_label.setText("")
-        self.name_label.setText("")
-        self.serial_label.setText("")
+            requests.post('http://172.19.10.12:5001/print_image',
+                          headers=headers, files=files, timeout=5)
+            self.force_print_button.setText("Sent to print")
+        except requests.exceptions.RequestException:
+            self.force_print_button.setText("Failed to print!")
+        finally:
+            files['file'].close()
+            os.remove(f'/tmp/tmp.upload-{asset_tag}.png')
 
 
 if __name__ == "__main__":
