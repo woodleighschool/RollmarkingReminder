@@ -18,8 +18,6 @@ class App(QtWidgets.QWidget):
             "Enter Unique Identifier (S/N, Name, Asset #):")
         self.asset_entry = QtWidgets.QLineEdit()
         self.print_var = QtWidgets.QCheckBox("Automatic Print")
-        self.switch_label = QtWidgets.QLabel("Select Device Type:")
-        self.switch_button = QtWidgets.QPushButton("Computer")
         self.status_label = QtWidgets.QLabel()
         self.model_label = QtWidgets.QLabel()
         self.name_label = QtWidgets.QLabel()
@@ -30,7 +28,6 @@ class App(QtWidgets.QWidget):
         # Connect widgets to functions
         self.asset_entry.returnPressed.connect(self.submit_asset_request)
         self.copy_button.clicked.connect(self.copy_serial_number)
-        self.switch_button.clicked.connect(self.switch_device_type)
 
         # Default button state and label text
         self.copy_button.setEnabled(False)
@@ -40,8 +37,6 @@ class App(QtWidgets.QWidget):
         layout = QtWidgets.QVBoxLayout(self)
         layout.addWidget(self.asset_label)
         layout.addWidget(self.asset_entry)
-        layout.addWidget(self.switch_label)
-        layout.addWidget(self.switch_button)
         layout.addWidget(self.print_var)
         layout.addWidget(self.status_label)
         layout.addWidget(self.model_label)
@@ -58,33 +53,15 @@ class App(QtWidgets.QWidget):
             self.api_token = 'Bearer ' + data['api_token']
         self.api_endpoint = "https://wdm.jamfcloud.com/JSSResource"
 
-        # Set default device type to computer
-        self.device_type = "computer"
-        self.switch_button.setText("Computer")
-
-    def switch_device_type(self):
-        # Toggle device type between computer and mobile device
-        if self.device_type == "computer":
-            self.device_type = "mobile device"
-            self.switch_button.setText("Mobile Device")
-        else:
-            self.device_type = "computer"
-            self.switch_button.setText("Computer")
-
     def submit_asset_request(self):
         # Get asset tag from widget
         asset_tag = self.asset_entry.text()
         self.copy_button.setText("Copy Serial Number")
 
         try:
-            if self.device_type == "computer":
-                # Get computer information from JAMF API
-                name, serial, model, managed, jamf_url = self.get_computer_info(
-                    asset_tag)
-            else:
-                # Get mobile device information from JAMF API
-                name, serial, model, managed, jamf_url = self.get_mobiledevice_info(
-                    asset_tag)
+            # Get computer information from JAMF API
+            name, serial, model, managed, jamf_url = self.get_device_info(
+                asset_tag)
 
             # Set widget labels with device information
             self.status_label.setStyleSheet("color: green")
@@ -114,62 +91,60 @@ class App(QtWidgets.QWidget):
         # Clear asset entry widget after submitting request
         self.asset_entry.clear()
 
-    def get_computer_info(self, asset_tag):
+    def get_device_info(self, asset_tag):
         # Setup JAMF API request and headers
         auth = self.api_user, self.api_password
         headers = {"Accept": "application/json",
                    "Content-Type": "application/json"}
+
+        # Try to match computer first
         match_api_endpoint = f"{self.api_endpoint}/computers/match/{asset_tag}"
-
-        # Get computer information from JAMF API and parse response
         response = requests.get(
-            match_api_endpoint, headers=headers, auth=auth, verify=False)
+            match_api_endpoint, headers=headers, auth=auth)
         if response.status_code != 200:
             raise ValueError("Failed to connect to JAMF API")
-        computer_match = json.loads(response.text)
-        if "computers" not in computer_match or len(computer_match["computers"]) == 0:
-            raise ValueError(f"Invalid asset ID")
-        computer_id = computer_match["computers"][0]["id"]
-        info_api_endpoint = f"{self.api_endpoint}/computers/id/{computer_id}"
+
+        device_match = json.loads(response.text)
+
+        if "computers" in device_match and len(device_match["computers"]) > 0:
+            device_type = "computers"
+            device_id = device_match["computers"][0]["id"]
+        else:
+            # If not matched as computer, try mobiledevice
+            match_api_endpoint = f"{self.api_endpoint}/mobiledevices/match/{asset_tag}"
+            response = requests.get(
+                match_api_endpoint, headers=headers, auth=auth)
+            if response.status_code != 200:
+                raise ValueError("Failed to connect to JAMF API")
+
+            device_match = json.loads(response.text)
+            if "mobile_devices" in device_match and len(device_match["mobile_devices"]) > 0:
+                device_type = "mobiledevices"
+                device_id = device_match["mobile_devices"][0]["id"]
+            else:
+                raise ValueError(f"Could not match \"{asset_tag}\"")
+
+        # Get device information from JAMF API and parse response
+        info_api_endpoint = f"{self.api_endpoint}/{device_type}/id/{device_id}"
         response = requests.get(
-            info_api_endpoint, headers=headers, auth=auth, verify=False)
-        computer = json.loads(response.text)["computer"]
-        model = computer["hardware"]["model"]
-        name = computer["general"]["name"]
-        serial = computer["general"]["serial_number"]
-        managed = computer["general"]["remote_management"]["managed"]
-        jamf_url = f"https://wdm.jamfcloud.com/computers.html?id={computer_id}"
+            info_api_endpoint, headers=headers, auth=auth)
 
-        # Return computer information
-        return name, serial, model, managed, jamf_url
+        if device_type == "computers":
+            computer = json.loads(response.text)["computer"]
+            model = computer["hardware"]["model"]
+            name = computer["general"]["name"]
+            serial = computer["general"]["serial_number"]
+            managed = computer["general"]["remote_management"]["managed"]
+            jamf_url = f"https://wdm.jamfcloud.com/computers.html?id={device_id}"
+        else:
+            mobiledevice = json.loads(response.text)["mobile_device"]
+            model = mobiledevice["general"]["model"]
+            name = mobiledevice["general"]["name"]
+            serial = mobiledevice["general"]["serial_number"]
+            managed = mobiledevice["general"]["managed"]
+            jamf_url = f"https://wdm.jamfcloud.com/mobileDevices.html?id={device_id}"
 
-    def get_mobiledevice_info(self, asset_tag):
-        # Setup JAMF API request and headers
-        auth = self.api_user, self.api_password
-        headers = {"Accept": "application/json",
-                   "Content-Type": "application/json"}
-        match_api_endpoint = f"{self.api_endpoint}/mobiledevices/match/{asset_tag}"
-
-        # Get mobiledevice information from JAMF API and parse response
-        response = requests.get(
-            match_api_endpoint, headers=headers, auth=auth, verify=False)
-        if response.status_code != 200:
-            raise ValueError("Failed to connect to JAMF API")
-        mobiledevice_match = json.loads(response.text)
-        if "mobile_devices" not in mobiledevice_match or len(mobiledevice_match["mobile_devices"]) == 0:
-            raise ValueError(f"Invalid asset ID")
-        mobiledevice_id = mobiledevice_match["mobile_devices"][0]["id"]
-        info_api_endpoint = f"{self.api_endpoint}/mobiledevices/id/{mobiledevice_id}"
-        response = requests.get(
-            info_api_endpoint, headers=headers, auth=auth, verify=False)
-        mobiledevice = json.loads(response.text)["mobile_device"]
-        model = mobiledevice["general"]["model"]
-        name = mobiledevice["general"]["name"]
-        serial = mobiledevice["general"]["serial_number"]
-        managed = mobiledevice["general"]["managed"]
-        jamf_url = f"https://wdm.jamfcloud.com/mobileDevices.html?id={mobiledevice_id}"
-
-        # Return mobiledevice information
+        # Return device information
         return name, serial, model, managed, jamf_url
 
     def generate_info(self, asset_tag, name, serial, model, jamf_url):
