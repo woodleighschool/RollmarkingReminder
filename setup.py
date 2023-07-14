@@ -9,10 +9,10 @@ OPTIONS = {
         'CFBundleName': 'TagToInfo',
         'CFBundleDisplayName': 'TagToInfo',
         'CFBundleIdentifier': 'com.woodleigh.tagtoinfo',
-        'CFBundleVersion': '0.2.1',
+        'CFBundleVersion': '0.2.2',
         'CFBundleShortVersionString': '0.2',
     },
-    'packages': ['requests', 'PIL', 'qrcode', 'PyQt5', 'chardet'],
+    'packages': ['keyring', 'requests', 'PIL', 'qrcode', 'PyQt5', 'chardet'],
     'includes': ['sys', 'os', 'json'],
 }
 

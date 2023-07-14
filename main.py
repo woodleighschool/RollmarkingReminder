@@ -3,6 +3,7 @@ import sys
 import json
 import qrcode
 import requests
+import keyring
 from PIL import Image, ImageDraw, ImageFont
 from PyQt5 import QtWidgets
 
@@ -56,13 +57,11 @@ class App(QtWidgets.QWidget):
         layout.addWidget(self.managed_label)
         layout.addWidget(self.copy_button)
 
-        # Load credentials from json file
-        with open('/Users/Shared/secrets.json') as f:
-            data = json.load(f)
-            self.api_user = data['api_user']
-            self.api_password = data['api_password']
-            self.api_token = 'Bearer ' + data['api_token']
-        self.api_endpoint = "https://wdm.jamfcloud.com/JSSResource"
+        # Load credentials keychain
+        self.jamf_api_user = "fresh-printer"
+        self.jamf_api_password = keyring.get_password("jamfcloud_api", self.jamf_api_user)
+        self.printer_api_key = 'Bearer ' + keyring.get_password("helpdesk_printer", "")
+        self.jamf_api_endpoint = "https://wdm.jamfcloud.com/JSSResource"
 
     def force_print(self):
         previous_submit = self.status_label.text().split(": ")[1]
@@ -112,14 +111,14 @@ class App(QtWidgets.QWidget):
 
     def get_device_info(self, asset_tag):
         # Setup JAMF API request and headers
-        auth = self.api_user, self.api_password
+        auth = self.jamf_api_user, self.jamf_api_password
         headers = {"Accept": "application/json",
                    "Content-Type": "application/json"}
 
         # Try to match computer first
-        match_api_endpoint = f"{self.api_endpoint}/computers/match/{asset_tag}"
+        match_jamf_api_endpoint = f"{self.jamf_api_endpoint}/computers/match/{asset_tag}"
         response = requests.get(
-            match_api_endpoint, headers=headers, auth=auth, verify=False)
+            match_jamf_api_endpoint, headers=headers, auth=auth, verify=False)
         if response.status_code != 200:
             raise ValueError("Failed to connect to JAMF API")
 
@@ -130,9 +129,9 @@ class App(QtWidgets.QWidget):
             device_id = device_match["computers"][0]["id"]
         else:
             # If not matched as computer, try mobiledevice
-            match_api_endpoint = f"{self.api_endpoint}/mobiledevices/match/{asset_tag}"
+            match_jamf_api_endpoint = f"{self.jamf_api_endpoint}/mobiledevices/match/{asset_tag}"
             response = requests.get(
-                match_api_endpoint, headers=headers, auth=auth, verify=False)
+                match_jamf_api_endpoint, headers=headers, auth=auth, verify=False)
             if response.status_code != 200:
                 raise ValueError("Failed to connect to JAMF API")
 
@@ -144,9 +143,9 @@ class App(QtWidgets.QWidget):
                 raise ValueError(f"Could not match \"{asset_tag}\"")
 
         # Get device information from JAMF API and parse response
-        info_api_endpoint = f"{self.api_endpoint}/{device_type}/id/{device_id}"
+        info_jamf_api_endpoint = f"{self.jamf_api_endpoint}/{device_type}/id/{device_id}"
         response = requests.get(
-            info_api_endpoint, headers=headers, auth=auth, verify=False)
+            info_jamf_api_endpoint, headers=headers, auth=auth, verify=False)
 
         if device_type == "computers":
             computer = json.loads(response.text)["computer"]
@@ -222,7 +221,7 @@ class App(QtWidgets.QWidget):
 
     def print_asset_label(self, asset_tag):
         # Print image to network printer
-        headers = {'Authorization': f'{self.api_token}'}
+        headers = {'Authorization': f'{self.printer_api_key}'}
         files = {'file': open(f'/tmp/tmp.upload-{asset_tag}.png', 'rb')}
 
         try:

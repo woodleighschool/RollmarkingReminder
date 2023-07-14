@@ -23,14 +23,21 @@ This application requires the following dependencies to be installed:
 
 ## Configuration
 
-Before running the application, you will need to provide your JAMF API credentials. Create a `secrets.json` file in the root directory of the application and enter the following information:
+Before running the application, you will need to provide your JAMF API credentials. These credentials are stored in a keychain, use python `keyring` to set them:
 
-```
-{
-  "api_user": "your_api_username",
-  "api_password": "your_api_password",
-  "api_token": "your_api_token"
-}
+```python
+import keyring
+
+# jamf api
+keyring.set_password("jamfcloud_api", "<username>", "<password>")
+
+# helpdesk printer api
+keyring.set_password("helpdesk_printer", "", "<key>")
+
+# double check:
+# jamf_api_user = "fresh-printer"
+# print(keyring.get_password("jamfcloud_api", jamf_api_user))
+# print(keyring.get_password("helpdesk_printer", ""))
 ```
 
-Replace `your_api_username`, `your_api_password`, and `your_api_token` with your own JAMF API credentials.
+Replace `username`, `password`, and `key` with your own credentials.
