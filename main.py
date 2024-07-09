@@ -83,14 +83,16 @@ class TagToInfo(QtWidgets.QWidget):
             return ''
 
         size_gb = size_mb / 1024
-        if size_gb < 1024:
-            sizes = [16, 18, 32, 36, 48, 64, 96, 128, 256, 512, 1024]
+        if size_gb <= 512:
+            sizes = [16, 32, 64, 128, 256, 512]
             for bracket in sizes:
                 if size_gb <= bracket:
                     return f'{bracket}GB'
         else:
-            size_tb = size_gb / 1024
-            tb_brackets = [1, 2, 4, 8]
+            size_tb = round(size_gb / 1024)
+            if size_tb == 0:
+                size_tb = 1
+            tb_brackets = [1, 2, 4, 8, 16, 32, 64, 128, 256]
             for bracket in tb_brackets:
                 if size_tb <= bracket:
                     return f'{bracket}TB'
