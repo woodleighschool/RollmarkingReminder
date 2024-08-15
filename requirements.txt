@@ -1,7 +1,5 @@
-PyQt5
-chardet
-Pillow
-py2app
-qrcode
 requests
 keyring
+qrcode
+PyQt5
+Pillow

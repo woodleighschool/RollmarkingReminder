@@ -1,4 +1,5 @@
 from setuptools import setup
+import subprocess
 
 APP = ['main.py']
 DATA_FILES = [('assets', ['assets/template.png',
@@ -9,11 +10,11 @@ OPTIONS = {
         'CFBundleName': 'TagToInfo',
         'CFBundleDisplayName': 'TagToInfo',
         'CFBundleIdentifier': 'com.woodleigh.tagtoinfo',
-        'CFBundleVersion': '0.2.2',
-        'CFBundleShortVersionString': '0.2',
+        'CFBundleVersion': '2.1',
+        'CFBundleShortVersionString': '2',
     },
-    'packages': ['keyring', 'requests', 'PIL', 'qrcode', 'PyQt5', 'chardet'],
-    'includes': ['sys', 'os', 'json'],
+    'packages': ['keyring', 'requests', 'qrcode', 'PyQt5', 'PIL'],
+    'includes': ['sys', 'os'],
 }
 
 setup(
@@ -23,3 +24,5 @@ setup(
     options={'py2app': OPTIONS},
     setup_requires=['py2app'],
 )
+
+subprocess.run(['codesign', '--deep', '--signature-size', '9400', '-f', '-s', 'Developer ID Application: Woodleigh School (SMLKBTR495)', 'dist/TagToInfo.app'])
