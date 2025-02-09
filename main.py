@@ -22,7 +22,6 @@ class RollMarkingReminder:
         return 1 <= day_of_week <= 5
 
     def get_ip_address(self):
-        # Replace `en0` with the correct interface if needed
         import subprocess
         result = subprocess.run(
             ["/sbin/ifconfig", "en0"], stdout=subprocess.PIPE, text=True
@@ -31,7 +30,7 @@ class RollMarkingReminder:
         return match.group(1) if match else None
 
     def is_staff_subnet(self, ip_address):
-        return re.match(r"^10\.10\.(4|5|6|7|9)\.\d+$", ip_address) is not None
+        return re.match(r"^10\.10\.(4|5|6|7)\.\d+$", ip_address) is not None
 
     async def main(self):
         while True:
