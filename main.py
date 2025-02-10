@@ -1,3 +1,4 @@
+import argparse
 import asyncio
 import time
 import re
@@ -33,6 +34,11 @@ class RollMarkingReminder:
         return re.match(r"^10\.10\.(4|5|6|7)\.\d+$", ip_address) is not None
 
     async def main(self):
+        # Send a debug startup notification if debug mode is enabled
+        if self.debug:
+            print("Debug mode enabled. Sending startup notification.")
+            await self.send_notification()
+
         while True:
             # Calculate sleep time until the next full minute
             now = time.time()
@@ -42,16 +48,20 @@ class RollMarkingReminder:
             ip_address = self.get_ip_address()
             if self.is_weekday():
                 if self.debug:
-                    print("Debug mode enabled. Sending notifications instantly.")
+                    print("Debug mode: Sending notification instantly.")
                     await self.send_notification()
                 elif ip_address and self.is_staff_subnet(ip_address):
                     current_time = datetime.now().strftime("%H:%M")
                     if current_time in ["11:20", "15:30"]:
                         await self.send_notification()
             elif self.debug:
-                print("Debug mode enabled, but today is a weekend. Skipping notification.")
+                print("Debug mode: Today is a weekend. Skipping notification.")
 
 
 if __name__ == "__main__":
-    reminder = RollMarkingReminder(debug=False)
+    parser = argparse.ArgumentParser(description="Roll Marking Reminder")
+    parser.add_argument("--debug", action="store_true", help="Enable debug mode")
+    args = parser.parse_args()
+
+    reminder = RollMarkingReminder(debug=args.debug)
     asyncio.run(reminder.main())

@@ -22,6 +22,9 @@ OPTIONS = {
     'excludes': ['rubicon']
 }
 
+"""
+py2app has no idea what rubicon is as its actually called `rubicon.obcj`, crappy work around...
+"""
 def copy_rubicon():
     """
     Manually copy `rubicon` and its metadata to the py2app build directory.
